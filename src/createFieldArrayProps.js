@@ -11,10 +11,10 @@ const createFieldArrayProps = (getIn, name,
   return {
     fields: {
       _isFieldArray: true,
-      forEach: callback => (value || []).forEach((item, index) => callback(`${name}[${index}]`, index)),
+      forEach: callback => (value || []).forEach((item, index) => callback(`${name}[${index}]`, index, item)),
       insert: arrayInsert,
       length,
-      map: callback => (value || []).map((item, index) => callback(`${name}[${index}]`, index)),
+      map: callback => (value || []).map((item, index) => callback(`${name}[${index}]`, index, item)),
       move: arrayMove,
       name,
       pop: () => {
