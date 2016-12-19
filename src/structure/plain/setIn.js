@@ -20,6 +20,15 @@ const setInWithPath = (state, value, path, pathIndex) => {
     return copy
   }
 
+  // Make redux-form understand model instances
+  if (state.toString && state.toString() === 'model') {
+    const Klass = state.constructor
+    return new Klass({
+      ...state,
+      [first]: next
+    })
+  }
+
   return {
     ...state,
     [first]: next
