@@ -36,6 +36,14 @@ const deleteInWithPath = (state, first, ...rest) => {
     }
     return state
   }
+
+  if (state.toString() === 'model') {
+    const Klass = state.constructor
+    const copy = { ...state }
+    delete copy[ first ]
+    return new Klass(copy)
+  }
+
   if (first in state) {
     const copy = { ...state }
     delete copy[ first ]
