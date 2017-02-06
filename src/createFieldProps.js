@@ -1,10 +1,3 @@
-import createOnBlur from './events/createOnBlur'
-import createOnChange from './events/createOnChange'
-import createOnDragStart from './events/createOnDragStart'
-import createOnDrop from './events/createOnDrop'
-import createOnFocus from './events/createOnFocus'
-import { noop } from 'lodash'
-
 const processProps = (type, props, _value) => {
   const { value } = props
   if (type === 'checkbox') {
@@ -29,27 +22,42 @@ const processProps = (type, props, _value) => {
   if (type === 'file') {
     return {
       ...props,
-      value: undefined
+      value: value || undefined
     }
   }
   return props
 }
 
-const createFieldProps = (getIn, name,
+const createFieldProps = ({ getIn, toJS }, name,
   {
-    asyncError, asyncValidating, blur, change, dirty, dispatch, focus, format,
-    normalize, parse, pristine, props, state, submitError, submitting, value,
-    _value, syncError, syncWarning, ...custom
-  }, asyncValidate = noop) => {
+    asyncError,
+    asyncValidating,
+    onBlur,
+    onChange,
+    onDrop,
+    onDragStart,
+    dirty,
+    dispatch,
+    onFocus,
+    form,
+    format,
+    parse,  // eslint-disable-line no-unused-vars
+    pristine,
+    props,
+    state,
+    submitError,
+    submitFailed,
+    submitting,
+    syncError,
+    syncWarning,
+    validate,  // eslint-disable-line no-unused-vars
+    value,
+    _value,
+    warn,  // eslint-disable-line no-unused-vars
+    ...custom
+  }) => {
   const error = syncError || asyncError || submitError
   const warning = syncWarning
-  const boundParse = parse && (value => parse(value, name))
-  const boundNormalize = normalize && (value => normalize(name, value))
-  const boundChange = value => dispatch(change(name, value))
-  const onChange = createOnChange(boundChange, {
-    normalize: boundNormalize,
-    parse: boundParse
-  })
 
   const formatFieldValue = (value, format) => {
     if (format === null) {
@@ -64,29 +72,27 @@ const createFieldProps = (getIn, name,
   return {
     input: processProps(custom.type, {
       name,
-      onBlur: createOnBlur(value => dispatch(blur(name, value)), {
-        normalize: boundNormalize,
-        parse: boundParse,
-        after: asyncValidate.bind(null, name)
-      }),
+      onBlur,
       onChange,
-      onDragStart: createOnDragStart(name, formattedFieldValue),
-      onDrop: createOnDrop(name, boundChange),
-      onFocus: createOnFocus(name, () => dispatch(focus(name))),
+      onDragStart,
+      onDrop,
+      onFocus,
       value: formattedFieldValue
     }, _value),
     meta: {
-      ...state,
+      ...toJS(state),
       active: !!(state && getIn(state, 'active')),
       asyncValidating,
       autofilled: !!(state && getIn(state, 'autofilled')),
       dirty,
       dispatch,
       error,
+      form,
       warning,
       invalid: !!error,
       pristine,
       submitting: !!submitting,
+      submitFailed: !!submitFailed,
       touched: !!(state && getIn(state, 'touched')),
       valid: !error,
       visited: !!(state && getIn(state, 'visited'))

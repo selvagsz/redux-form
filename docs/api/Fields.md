@@ -126,7 +126,8 @@ The following properties and methods are available on an instance of a `Field` c
 
 #### `names : Array<String>`
 
-> The `names` prop that you passed in.
+> When nested in `FormSection`, returns the `names` prop prefixed with the `FormSection` name.
+Otherwise, returns a copy of the `names` prop that you passed in.
 
 #### `pristine : boolean`
 
@@ -148,7 +149,7 @@ For example, if your `names` are `[ 'name.first', 'name.last', 'email' ]`, the `
 ## Props
 
 The props that `Fields` will pass to your component are [the same `input` and `meta` structures 
-that `Field` generates](https://redux-form.com/6.3.1/docs/api/Field.md/#props), except that
+that `Field` generates](https://redux-form.com/6.5.0/docs/api/Field.md/#props), except that
 they are broken up into the structure of the fields you gave as `names`. 
 
 Any additional props that you pass to `Field` will be included at the root of the props structure

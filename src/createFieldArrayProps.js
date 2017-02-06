@@ -1,4 +1,4 @@
-const createFieldArrayProps = (getIn, name,
+const createFieldArrayProps = (getIn, name, sectionPrefix, getValue,
   {
     arrayInsert, arrayMove, arrayPop, arrayPush, arrayRemove, arrayRemoveAll, arrayShift,
     arraySplice, arraySwap, arrayUnshift, asyncError, // eslint-disable-line no-unused-vars
@@ -8,15 +8,16 @@ const createFieldArrayProps = (getIn, name,
   }) => {
   const error = syncError || asyncError || submitError
   const warning = syncWarning
+  const fieldName = sectionPrefix ? name.replace(`${sectionPrefix}.`, '') : name
   const finalProps = {
     fields: {
       _isFieldArray: true,
-      forEach: callback => (value || []).forEach((item, index) => callback(`${name}[${index}]`, index, finalProps.fields, item)),
-      get: index => value && getIn(value, index),
+      forEach: callback => (value || []).forEach((item, index) => callback(`${fieldName}[${index}]`, index, finalProps.fields, item)),
+      get: getValue,
       getAll: () => value,
       insert: arrayInsert,
       length,
-      map: callback => (value || []).map((item, index) => callback(`${name}[${index}]`, index, finalProps.fields, item)),
+      map: callback => (value || []).map((item, index) => callback(`${fieldName}[${index}]`, index, finalProps.fields, item)),
       move: arrayMove,
       name,
       pop: () => {
@@ -25,7 +26,7 @@ const createFieldArrayProps = (getIn, name,
       },
       push: arrayPush,
       reduce: (callback, initial) => (value || [])
-        .reduce((accumulator, item, index) => callback(accumulator, `${name}[${index}]`, index, finalProps.fields), initial),
+        .reduce((accumulator, item, index) => callback(accumulator, `${fieldName}[${index}]`, index, finalProps.fields), initial),
       remove: arrayRemove,
       removeAll: arrayRemoveAll,
       shift: () => {

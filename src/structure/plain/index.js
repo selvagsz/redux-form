@@ -3,7 +3,7 @@ import getIn from './getIn'
 import setIn from './setIn'
 import deepEqual from './deepEqual'
 import deleteIn from './deleteIn'
-import { some } from 'lodash'
+import keys from './keys'
 
 const structure = {
   empty: {},
@@ -13,9 +13,10 @@ const structure = {
   deepEqual,
   deleteIn,
   fromJS: value => value,
+  keys,
   size: array => array ? array.length : 0,
-  some,
-  splice
+  splice,
+  toJS: value => value
 }
 
 export default structure

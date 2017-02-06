@@ -229,6 +229,19 @@ const describeFields = (name, structure, combineReducers, expect) => {
       expect(props.foo.meta.error).toBe('foo error')
     })
 
+    it('should get submitFailed prop from Redux state', () => {
+      const props = testProps({
+        initial: {
+          foo: 'bar'
+        },
+        values: {
+          foo: 'bar'
+        },
+        submitFailed: true
+      })
+      expect(props.foo.meta.submitFailed).toBe(true)
+    })
+
     it('should provide names getter', () => {
       const store = makeStore({
         testForm: {
@@ -595,10 +608,10 @@ const describeFields = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [
-              { name: 'dog', type: 'Field' },
-              { name: 'cat', type: 'Field' }
-            ]
+            registeredFields: {
+              dog: { name: 'dog', type: 'Field', count: 1 },
+              cat: { name: 'cat', type: 'Field', count: 1 }
+            }
           }
         }
       })
@@ -609,10 +622,10 @@ const describeFields = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [
-              { name: 'cow', type: 'Field' },
-              { name: 'ewe', type: 'Field' }
-            ]
+            registeredFields: {
+              cow: { name: 'cow', type: 'Field', count: 1 },
+              ewe: { name: 'ewe', type: 'Field', count: 1 }
+            }
           }
         }
       })
@@ -665,6 +678,52 @@ const describeFields = (name, structure, combineReducers, expect) => {
       expect(input.calls[ 1 ].arguments[ 0 ].bar.meta.touched).toBe(true)
     })
 
+    it('should prefix name getter when inside FormSection', () => {
+      const store = makeStore()
+      const renderFields = ({ foo, bar }) => <div>
+        <input {...foo.input}/>
+        <input {...bar.input}/>
+      </div>
+      class Form extends Component {
+        render() {
+          return (<FormSection name="foo">
+            <Fields names={[ 'foo', 'bar' ]} component={renderFields}/>
+          </FormSection>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+      const stub = TestUtils.findRenderedComponentWithType(dom, Fields)
+      expect(stub.names).toEqual([ 'foo.foo', 'foo.bar' ])
+    })
+    it('should prefix name getter when inside multiple FormSection', () => {
+      const store = makeStore()
+      const renderFields = ({ foo, bar }) => <div>
+        <input {...foo.input}/>
+        <input {...bar.input}/>
+      </div>
+      class Form extends Component {
+        render() {
+          return (<FormSection name="foo">
+            <FormSection name="fighter">
+              <Fields names={[ 'foo', 'bar' ]} component={renderFields}/>
+            </FormSection>
+          </FormSection>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+      const stub = TestUtils.findRenderedComponentWithType(dom, Fields)
+      expect(stub.names).toEqual([ 'foo.fighter.foo', 'foo.fighter.bar' ])
+    })
 
     it('should prefix name when inside FormSection', () => {
       const store = makeStore()
@@ -689,10 +748,10 @@ const describeFields = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [ 
-              { name: 'foo.foo', type: 'Field' },
-              { name: 'foo.bar', type: 'Field' }              
-            ]
+            registeredFields: {
+              'foo.foo': { name: 'foo.foo', type: 'Field', count: 1 },
+              'foo.bar': { name: 'foo.bar', type: 'Field', count: 1 }              
+            }
           }
         }
       })
@@ -723,10 +782,10 @@ const describeFields = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [ 
-              { name: 'foo.fighter.foo', type: 'Field' },
-              { name: 'foo.fighter.bar', type: 'Field' }              
-            ]
+            registeredFields: {
+              'foo.fighter.foo': { name: 'foo.fighter.foo', type: 'Field', count: 1 },
+              'foo.fighter.bar': { name: 'foo.fighter.bar', type: 'Field', count: 1 }
+            }
           }
         }
       })
@@ -975,6 +1034,40 @@ const describeFields = (name, structure, combineReducers, expect) => {
       expect(input.calls[ 1 ].arguments[ 0 ].name.input.value).toBe('redux form rocks')
     })
 
+    it('should handle on focus', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            name: 'redux form'
+          }
+        }
+      })
+      const input = createSpy(props => <input {...props.input}/>).andCallThrough()
+      class Form extends Component {
+        render() {
+          return (
+            <div>
+              <Fields names={[ 'name' ]} component={input}/>
+            </div>
+          )
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      expect(input.calls.length).toBe(1)
+      expect(input.calls[ 0 ].arguments[ 0 ].name.meta.visited).toBe(false)
+
+      input.calls[ 0 ].arguments[ 0 ].name.input.onFocus()
+
+      expect(input.calls.length).toBe(2)
+      expect(input.calls[ 1 ].arguments[ 0 ].name.meta.visited).toBe(true)
+    })
+
     it('should parse and format to maintain different type in store', () => {
       const store = makeStore({
         testForm: {
@@ -1028,7 +1121,7 @@ const describeFields = (name, structure, combineReducers, expect) => {
             values: {
               age: 15 // number
             },
-            registeredFields: [ { name: 'age', type: 'Field' } ]
+            registeredFields: { age: { name: 'age', type: 'Field', count: 1 } }
           }
         }
       })
@@ -1134,12 +1227,12 @@ const describeFields = (name, structure, combineReducers, expect) => {
       // update username field so it passes
       usernameInput.calls[ 0 ].arguments[ 0 ].username.input.onChange('erikras')
 
-      // username input rerendered twice, once for value, once for sync error
-      expect(usernameInput.calls.length).toBe(3)
+      // username input rerendered
+      expect(usernameInput.calls.length).toBe(2)
 
       // should be valid now
-      expect(usernameInput.calls[ 2 ].arguments[ 0 ].username.meta.valid).toBe(true)
-      expect(usernameInput.calls[ 2 ].arguments[ 0 ].username.meta.error).toBe(undefined)
+      expect(usernameInput.calls[ 1 ].arguments[ 0 ].username.meta.valid).toBe(true)
+      expect(usernameInput.calls[ 1 ].arguments[ 0 ].username.meta.error).toBe(undefined)
     })
 
     it('should rerender when sync warning changes', () => {
@@ -1230,11 +1323,11 @@ const describeFields = (name, structure, combineReducers, expect) => {
       // update username field so it passes
       usernameInput.calls[ 0 ].arguments[ 0 ].username.input.onChange('erikras')
 
-      // username input rerendered twice, once for value, once for sync warning
-      expect(usernameInput.calls.length).toBe(3)
+      // username input rerendered
+      expect(usernameInput.calls.length).toBe(2)
 
       // should be valid now
-      expect(usernameInput.calls[ 2 ].arguments[ 0 ].username.meta.warning).toBe(undefined)
+      expect(usernameInput.calls[ 1 ].arguments[ 0 ].username.meta.warning).toBe(undefined)
     })
 
     it('should provide correct prop structure', () => {
@@ -1286,6 +1379,170 @@ const describeFields = (name, structure, combineReducers, expect) => {
       expect(fields.someCustomProp).toBe('testing')
       expect(fields.anotherCustomProp).toBe(42)
       expect(fields.customBooleanFlag).toBe(true)
+    })
+
+    it('should provide correct prop structure after names change', () => {
+      const store = makeStore()
+      const renderFields = createSpy(() => <div/>).andCallThrough()
+      class Form extends Component {
+        constructor(props) {
+          super(props)
+          this.state = { names: [ 'foo', 'bar', 'deep.dive', 'array[0]' ] }
+          this.changeNames = this.changeNames.bind(this) 
+        }
+        changeNames() {
+          this.setState({ names: [ 'fighter', 'fly.high', 'array[1]' ] })
+        }
+        render() {
+          return (<div>
+            <Fields
+              names={this.state.names}
+              component={renderFields}
+              someCustomProp="testing"
+              anotherCustomProp={42}
+              customBooleanFlag/>
+            <button type="button" onClick={this.changeNames} />
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      const button = TestUtils.findRenderedDOMComponentWithTag(dom, 'button')
+      TestUtils.Simulate.click(button)
+      expect(renderFields).toHaveBeenCalled()
+      expect(renderFields.calls.length).toBe(2)
+      const fields = renderFields.calls[ 1 ].arguments[ 0 ]
+
+      const expectField = field => {
+        expect(field).toExist()
+        expect(field.input).toExist()
+        expect(field.input.onChange).toBeA('function')
+        expect(field.input.onBlur).toBeA('function')
+        expect(field.input.onFocus).toBeA('function')
+        expect(field.meta).toExist()
+        expect(field.meta.pristine).toBe(true)
+        expect(field.meta.dirty).toBe(false)
+        expect(field.someCustomProp).toNotExist()
+        expect(field.anotherCustomProp).toNotExist()
+        expect(field.customBooleanFlag).toNotExist()
+      }
+
+      expectField(fields.fighter)
+      expect(fields.fly).toExist()
+      expectField(fields.fly.high)
+      expect(fields.array).toExist()
+      expectField(fields.array[1])
+      expect(fields.someCustomProp).toBe('testing')
+      expect(fields.anotherCustomProp).toBe(42)
+      expect(fields.customBooleanFlag).toBe(true)
+
+      expect(fields.foo).toNotExist()
+      expect(fields.bar).toNotExist()
+      expect(fields.deep).toNotExist()
+      expect(fields.array[0]).toNotExist()
+    })
+
+    it('should reassign event handlers when names change', () => {
+      const store = makeStore()
+      const renderFields = createSpy(() => <div/>).andCallThrough()
+      class Form extends Component {
+        constructor(props) {
+          super(props)
+          this.state = { names: [ 'foo', 'bar', 'deep.dive', 'array[0]' ] }
+          this.changeNames = this.changeNames.bind(this)
+        }
+        changeNames() {
+          this.setState({ names: [ 'fighter', 'fly.high', 'array[1]' ] })
+        }
+        render() {
+          return (<div>
+            <Fields
+              names={this.state.names}
+              component={renderFields}
+              someCustomProp="testing"
+              anotherCustomProp={42}
+              customBooleanFlag/>
+            <button type="button" onClick={this.changeNames} />
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+      const button = TestUtils.findRenderedDOMComponentWithTag(dom, 'button')
+
+      expect(renderFields).toHaveBeenCalled()
+      expect(renderFields.calls.length).toBe(1)
+
+      // foo is inactive
+      expect(renderFields.calls[0].arguments[0].foo.meta.active).toBe(false)
+
+      // focus on foo
+      renderFields.calls[0].arguments[0].foo.input.onFocus()
+
+      // foo is active
+      expect(renderFields.calls.length).toBe(2)
+      expect(renderFields.calls[1].arguments[0].foo.meta.active).toBe(true)
+      expect(renderFields.calls[1].arguments[0].foo.input.value).toBe('')
+
+      // change foo
+      renderFields.calls[1].arguments[0].foo.input.onChange('erikras')
+
+      // foo is changed
+      expect(renderFields.calls.length).toBe(3)
+      expect(renderFields.calls[2].arguments[0].foo.meta.active).toBe(true)
+      expect(renderFields.calls[2].arguments[0].foo.input.value).toBe('erikras')
+
+      // blur foo
+      renderFields.calls[2].arguments[0].foo.input.onBlur('@erikras')
+
+      // foo is blurred
+      expect(renderFields.calls.length).toBe(4)
+      expect(renderFields.calls[3].arguments[0].foo.meta.active).toBe(false)
+      expect(renderFields.calls[3].arguments[0].foo.input.value).toBe('@erikras')
+
+      // swap out fields
+      TestUtils.Simulate.click(button)
+
+      // original fields gone
+      expect(renderFields.calls.length).toBe(5)
+      expect(renderFields.calls[4].arguments[0].foo).toNotExist()
+      expect(renderFields.calls[4].arguments[0].fighter).toExist()
+
+      // fighter is inactive
+      expect(renderFields.calls[4].arguments[0].fighter.meta.active).toBe(false)
+
+      // focus on fighter
+      renderFields.calls[4].arguments[0].fighter.input.onFocus()
+
+      // fighter is active
+      expect(renderFields.calls.length).toBe(6)
+      expect(renderFields.calls[5].arguments[0].fighter.meta.active).toBe(true)
+      expect(renderFields.calls[5].arguments[0].fighter.input.value).toBe('')
+
+      // change fighter
+      renderFields.calls[5].arguments[0].fighter.input.onChange('reduxForm')
+
+      // fighter is changed
+      expect(renderFields.calls.length).toBe(7)
+      expect(renderFields.calls[6].arguments[0].fighter.meta.active).toBe(true)
+      expect(renderFields.calls[6].arguments[0].fighter.input.value).toBe('reduxForm')
+
+      // blur fighter
+      renderFields.calls[6].arguments[0].fighter.input.onBlur('@reduxForm')
+
+      // fighter is blurred
+      expect(renderFields.calls.length).toBe(8)
+      expect(renderFields.calls[7].arguments[0].fighter.meta.active).toBe(false)
+      expect(renderFields.calls[7].arguments[0].fighter.input.value).toBe('@reduxForm')
     })
   })
 }

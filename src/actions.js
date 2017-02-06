@@ -67,14 +67,19 @@ export const clearSubmit = (form) =>
 export const clearAsyncError = (form, field) =>
   ({ type: CLEAR_ASYNC_ERROR, meta: { form, field } })
 
-export const destroy = (form) =>
+export const destroy = (...form) =>
   ({ type: DESTROY, meta: { form } })
 
 export const focus = (form, field) =>
   ({ type: FOCUS, meta: { form, field } })
 
-export const initialize = (form, values, keepDirty) =>
-  ({ type: INITIALIZE, meta: { form, keepDirty }, payload: values })
+export const initialize = (form, values, keepDirty, otherMeta = {}) => {
+  if (keepDirty instanceof Object) {
+    otherMeta = keepDirty
+    keepDirty = false
+  }
+  return { type: INITIALIZE, meta: { form, keepDirty, ...otherMeta }, payload: values }
+}
 
 export const registerField = (form, name, type) =>
   ({ type: REGISTER_FIELD, meta: { form }, payload: { name, type } })
@@ -124,8 +129,8 @@ export const setSubmitSucceeded = (form, ...fields) =>
 export const touch = (form, ...fields) =>
   ({ type: TOUCH, meta: { form, fields } })
 
-export const unregisterField = (form, name) =>
-  ({ type: UNREGISTER_FIELD, meta: { form }, payload: { name } })
+export const unregisterField = (form, name, destroyOnUnmount = true) =>
+  ({ type: UNREGISTER_FIELD, meta: { form }, payload: { name, destroyOnUnmount } })
 
 export const untouch = (form, ...fields) =>
   ({ type: UNTOUCH, meta: { form, fields } })

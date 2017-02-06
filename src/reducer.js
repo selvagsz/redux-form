@@ -32,7 +32,6 @@ import {
   UPDATE_SYNC_ERRORS,
   UPDATE_SYNC_WARNINGS
 } from './actionTypes'
-import 'array-findindex-polyfill'
 import createDeleteInWithCleanUp from './deleteInWithCleanUp'
 
 const createReducer = structure => {
@@ -43,8 +42,8 @@ const createReducer = structure => {
     setIn,
     deleteIn,
     fromJS,
+    keys,
     size,
-    some,
     splice
   } = structure
   const deleteInWithCleanUp = createDeleteInWithCleanUp(structure)
@@ -172,7 +171,7 @@ const createReducer = structure => {
     [CLEAR_SUBMIT](state) {
       return deleteIn(state, 'triggerSubmit')
     },
-    [CLEAR_ASYNC_ERROR](state, { meta: { field } } ) {
+    [CLEAR_ASYNC_ERROR](state, { meta: { field } }) {
       return deleteIn(state, `asyncErrors.${field}`)
     },
     [FOCUS](state, { meta: { field } }) {
@@ -184,7 +183,7 @@ const createReducer = structure => {
       result = setIn(result, 'active', field)
       return result
     },
-    [INITIALIZE](state, { payload, meta: { keepDirty } }) {
+    [INITIALIZE](state, { payload, meta: { keepDirty, keepSubmitSucceeded } }) {
       const mapData = fromJS(payload)
       let result = empty // clean all field state
 
@@ -229,8 +228,7 @@ const createReducer = structure => {
         //
         const previousValues = getIn(state, 'values')
         const previousInitialValues = getIn(state, 'initial')
-        registeredFields.forEach(field => {
-          const name = getIn(field, 'name')
+        keys(registeredFields).forEach(name => {
           const previousInitialValue = getIn(previousInitialValues, name)
           const previousValue = getIn(previousValues, name)
           if (!deepEqual(previousValue, previousInitialValue)) {
@@ -239,20 +237,23 @@ const createReducer = structure => {
           }
         })
       }
+      if (keepSubmitSucceeded && getIn(state, 'submitSucceeded')) {
+        result = setIn(result, 'submitSucceeded', true) 
+      }
       result = setIn(result, 'values', newValues)
       result = setIn(result, 'initial', mapData)
       return result
     },
     [REGISTER_FIELD](state, { payload: { name, type } }) {
-      let result = state
-      const registeredFields = getIn(result, 'registeredFields')
-      if (some(registeredFields, (field) => getIn(field, 'name') === name)) {
-        return state
+      const key = `registeredFields['${name}']`
+      let field = getIn(state, key)
+      if (field) {
+        const count = getIn(field, 'count') + 1
+        field = setIn(field, 'count', count)
+      } else {
+        field = fromJS({ name, type, count: 1 })
       }
-
-      const mapData = fromJS({ name, type })
-      result = setIn(state, 'registeredFields', splice(registeredFields, size(registeredFields), 0, mapData))
-      return result
+      return setIn(state, key, field)
     },
     [RESET](state) {
       let result = empty
@@ -343,24 +344,25 @@ const createReducer = structure => {
       result = setIn(result, 'anyTouched', true)
       return result
     },
-    [UNREGISTER_FIELD](state, { payload: { name } }) {
-      const registeredFields = getIn(state, 'registeredFields')
-
-      // in case the form was destroyed and registeredFields no longer exists
-      if (!registeredFields) {
-        return state
+    [UNREGISTER_FIELD](state, { payload: { name, destroyOnUnmount } }) {
+      let result = state
+      const key = `registeredFields['${name}']`
+      let field = getIn(result, key)
+      if (!field) {
+        return result
       }
 
-      const fieldIndex = registeredFields.findIndex((value) => {
-        return getIn(value, 'name') === name
-      })
-      if (size(registeredFields) <= 1 && fieldIndex >= 0) {
-        return deleteInWithCleanUp(state, 'registeredFields')
+      const count = getIn(field, 'count') - 1
+      if (count <= 0 && destroyOnUnmount) {
+        result = deleteIn(result, key)
+        if (deepEqual(getIn(result, 'registeredFields'), empty)) {
+          result = deleteIn(result, 'registeredFields')
+        }
+      } else {
+        field = setIn(field, 'count', count)
+        result = setIn(result, key, field)
       }
-      if (fieldIndex < 0) {
-        return state
-      }
-      return setIn(state, 'registeredFields', splice(registeredFields, fieldIndex, 1))
+      return result
     },
     [UNTOUCH](state, { meta: { fields } }) {
       let result = state
@@ -411,7 +413,7 @@ const createReducer = structure => {
         return state
       }
       if (action.type === DESTROY) {
-        return deleteInWithCleanUp(state, action.meta.form)
+        return action.meta.form.reduce((result, form) => deleteInWithCleanUp(result, form), state)
       }
       const formState = getIn(state, form)
       const result = reducer(formState, action)

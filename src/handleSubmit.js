@@ -16,9 +16,10 @@ const handleSubmit = (submit, props, valid, asyncValidate, fields) => {
         result = submit(values, dispatch, props)
       } catch (submitError) {
         const error = submitError instanceof SubmissionError ? submitError.errors : undefined
+        stopSubmit(error)
         setSubmitFailed(...fields)
         if (onSubmitFail) {
-          onSubmitFail(error, dispatch, submitError)
+          onSubmitFail(error, dispatch, submitError, props)
         }
         if (error || onSubmitFail) {
           // if you've provided an onSubmitFail callback, don't re-throw the error
@@ -34,7 +35,7 @@ const handleSubmit = (submit, props, valid, asyncValidate, fields) => {
             stopSubmit()
             setSubmitSucceeded()
             if (onSubmitSuccess) {
-              onSubmitSuccess(submitResult, dispatch)
+              onSubmitSuccess(submitResult, dispatch, props)
             }
             return submitResult
           }, submitError => {
@@ -42,7 +43,7 @@ const handleSubmit = (submit, props, valid, asyncValidate, fields) => {
             stopSubmit(error)
             setSubmitFailed(...fields)
             if (onSubmitFail) {
-              onSubmitFail(error, dispatch, submitError)
+              onSubmitFail(error, dispatch, submitError, props)
             }
             if (error || onSubmitFail) {
               // if you've provided an onSubmitFail callback, don't re-throw the error
@@ -54,7 +55,7 @@ const handleSubmit = (submit, props, valid, asyncValidate, fields) => {
       } else {
         setSubmitSucceeded()
         if (onSubmitSuccess) {
-          onSubmitSuccess(result, dispatch)
+          onSubmitSuccess(result, dispatch, props)
         }
       }
       return result
@@ -72,7 +73,7 @@ const handleSubmit = (submit, props, valid, asyncValidate, fields) => {
         .catch(asyncErrors => {
           setSubmitFailed(...fields)
           if (onSubmitFail) {
-            onSubmitFail(asyncErrors, dispatch, null)
+            onSubmitFail(asyncErrors, dispatch, null, props)
           }
           return Promise.reject(asyncErrors)
         })
@@ -82,7 +83,7 @@ const handleSubmit = (submit, props, valid, asyncValidate, fields) => {
   } else {
     setSubmitFailed(...fields)
     if (onSubmitFail) {
-      onSubmitFail(syncErrors, dispatch, null)
+      onSubmitFail(syncErrors, dispatch, null, props)
     }
     return syncErrors
   }

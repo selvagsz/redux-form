@@ -140,10 +140,10 @@ const describeInitialize = (reducer, expect, { fromJS }) => () => {
   it('should set initialize values, and not remove registered fields', () => {
     const state = reducer(fromJS({
       foo: {
-        registeredFields: [
-          { name: 'username', type: 'Field' },
-          { name: 'password', type: 'Field' }
-        ],
+        registeredFields: {
+          username: { name: 'username', type: 'Field', count: 1 },
+          password: { name: 'password', type: 'Field', count: 1 }
+        },
         values: {
           username: 'dirtyValue'
         },
@@ -157,10 +157,10 @@ const describeInitialize = (reducer, expect, { fromJS }) => () => {
     expect(state)
       .toEqualMap({
         foo: {
-          registeredFields: [
-            { name: 'username', type: 'Field' },
-            { name: 'password', type: 'Field' }
-          ],
+          registeredFields: {
+            username: { name: 'username', type: 'Field', count: 1 },
+            password: { name: 'password', type: 'Field', count: 1 }
+          },
           values: {
             username: 'cleanValue',
             password: 'cleanPassword'
@@ -172,13 +172,44 @@ const describeInitialize = (reducer, expect, { fromJS }) => () => {
         }
       })
   })
+  
+  it('should not retain submitSucceeded when keepSubmitSucceeded is not set', () => {
+    const state = reducer(fromJS({
+      foo: {
+        submitSucceeded: true 
+      }
+    }), initialize('foo', {}))
+    expect(state)
+      .toEqualMap({
+        foo: {
+          values: {},
+          initial: {}
+        }
+      })    
+  })
+  
+  it('should retain submitSucceeded when keepSubmitSucceeded is set', () => {
+    const state = reducer(fromJS({
+      foo: {
+        submitSucceeded: true 
+      }
+    }), initialize('foo', {}, { keepSubmitSucceeded: true }))
+    expect(state)
+      .toEqualMap({
+        foo: {
+          values: {},
+          initial: {},
+          submitSucceeded: true 
+        }
+      })    
+  })
 
   it('should retain dirty values when keepDirty is set', () => {
     const state = reducer(fromJS({
       foo: {
-        registeredFields: [
-          { name: 'myField', type: 'Field' }
-        ],
+        registeredFields: {
+          myField: { name: 'myField', type: 'Field', count: 1 }
+        },
         values: {
           myField: 'dirtyValue'
         },
@@ -190,9 +221,9 @@ const describeInitialize = (reducer, expect, { fromJS }) => () => {
     expect(state)
       .toEqualMap({
         foo: {
-          registeredFields: [
-            { name: 'myField', type: 'Field' }
-          ],
+          registeredFields: {
+            myField: { name: 'myField', type: 'Field', count: 1 }
+          },
           values: {
             myField: 'dirtyValue'
           },
@@ -206,9 +237,9 @@ const describeInitialize = (reducer, expect, { fromJS }) => () => {
   it('should replace pristine values when keepDirty is set', () => {
     const state = reducer(fromJS({
       foo: {
-        registeredFields: [
-          { name: 'myField', type: 'Field' }
-        ],
+        registeredFields: {
+          myField: { name: 'myField', type: 'Field', count: 1 }
+        },
         values: {
           myField: 'initialValue'
         },
@@ -220,9 +251,9 @@ const describeInitialize = (reducer, expect, { fromJS }) => () => {
     expect(state)
       .toEqualMap({
         foo: {
-          registeredFields: [
-            { name: 'myField', type: 'Field' }
-          ],
+          registeredFields: {
+            myField: { name: 'myField', type: 'Field', count: 1 }
+          },
           values: {
             myField: 'newValue'
           },
@@ -236,9 +267,9 @@ const describeInitialize = (reducer, expect, { fromJS }) => () => {
   it('should treat a matching dirty value as pristine when keepDirty is set', () => {
     const state = reducer(fromJS({
       foo: {
-        registeredFields: [
-          { name: 'myField', type: 'Field' }
-        ],
+        registeredFields: {
+          myField: { name: 'myField', type: 'Field', count: 1 }
+        },
         values: {
           myField: 'newValue'
         },
@@ -250,11 +281,41 @@ const describeInitialize = (reducer, expect, { fromJS }) => () => {
     expect(state)
       .toEqualMap({
         foo: {
-          registeredFields: [
-            { name: 'myField', type: 'Field' }
-          ],
+          registeredFields: {
+            myField: { name: 'myField', type: 'Field', count: 1 }
+          },
           values: {
             myField: 'newValue'
+          },
+          initial: {
+            myField: 'newValue'
+          }
+        }
+      })
+  })
+  
+  it('allows passing keepDirty in options argument', () => {
+    const state = reducer(fromJS({
+      foo: {
+        registeredFields: {
+          myField: { name: 'myField', type: 'Field', count: 1 }
+        },
+        values: {
+          myField: 'dirtyValue'
+        },
+        initial: {
+          myField: 'initialValue'
+        }
+      }
+    }), initialize('foo', { myField: 'newValue' }, { keepDirty: true }))
+    expect(state)
+      .toEqualMap({
+        foo: {
+          registeredFields: {
+            myField: { name: 'myField', type: 'Field', count: 1 }
+          },
+          values: {
+            myField: 'dirtyValue'
           },
           initial: {
             myField: 'newValue'

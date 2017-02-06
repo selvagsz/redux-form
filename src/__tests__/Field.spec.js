@@ -14,6 +14,10 @@ import plainExpectations from '../structure/plain/expectations'
 import immutable from '../structure/immutable'
 import immutableExpectations from '../structure/immutable/expectations'
 import addExpectations from './addExpectations'
+import { dragStartMock, dropMock } from '../util/eventMocks'
+import { dataKey } from '../util/eventConsts'
+
+const testFormName = 'testForm'
 
 const describeField = (name, structure, combineReducers, expect) => {
   const reduxForm = createReduxForm(structure)
@@ -30,13 +34,13 @@ const describeField = (name, structure, combineReducers, expect) => {
   }
 
   const testProps = (state, config = {}) => {
-    const store = makeStore({ testForm: state })
+    const store = makeStore({ [testFormName]: state })
     class Form extends Component {
       render() {
         return <div><Field name="foo" component={TestInput}/></div>
       }
     }
-    const TestForm = reduxForm({ form: 'testForm', ...config })(Form)
+    const TestForm = reduxForm({ form: testFormName, ...config })(Form)
     const dom = TestUtils.renderIntoDocument(
       <Provider store={store}>
         <TestForm/>
@@ -213,6 +217,11 @@ const describeField = (name, structure, combineReducers, expect) => {
       expect(props2.meta.visited).toBe(true)
     })
 
+    it('should pass in the form name as meta.form', () => {
+      const props = testProps()
+      expect(props.meta.form).toBe(testFormName)
+    })
+
     it('should get sync errors from outer reduxForm component', () => {
       const props = testProps({
         initial: {
@@ -269,6 +278,13 @@ const describeField = (name, structure, combineReducers, expect) => {
         }
       })
       expect(props.meta.error).toBe('foo error')
+    })
+
+    it('should get submitFailed prop from Redux state', () => {
+      const props = testProps({
+        submitFailed: true
+      })
+      expect(props.meta.submitFailed).toBe(true)
     })
 
     it('should provide meta.dispatch', () => {
@@ -573,11 +589,50 @@ const describeField = (name, structure, combineReducers, expect) => {
       expect(input.calls[ 1 ].arguments[ 0 ].meta.touched).toBe(true)
     })
 
-    it('should prefix name when inside FormSection', () => {
+    it('should prefix name getter when inside FormSection', () => {
+      const store = makeStore()
+      class Form extends Component {
+        render() {
+          return (<FormSection name="foo" component="span">
+            <Field name="bar" component="input"/>
+          </FormSection>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+      const stub = TestUtils.findRenderedComponentWithType(dom, Field)
+      expect(stub.name).toBe('foo.bar')
+    })
+    it('should prefix name getter when inside multiple FormSection', () => {
       const store = makeStore()
       class Form extends Component {
         render() {
           return (<FormSection name="foo">
+            <FormSection name="fighter">
+              <Field name="bar" component="input"/>
+            </FormSection>
+          </FormSection>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+      const stub = TestUtils.findRenderedComponentWithType(dom, Field)
+      expect(stub.name).toBe('foo.fighter.bar')
+    })
+
+    it('should prefix name when inside FormSection', () => {
+      const store = makeStore()
+      class Form extends Component {
+        render() {
+          return (<FormSection name="foo" component="span">
             <Field name="bar" component="input"/>
           </FormSection>)
         }
@@ -592,7 +647,7 @@ const describeField = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [ { name: 'foo.bar', type: 'Field' } ]
+            registeredFields: { 'foo.bar': { name: 'foo.bar', type: 'Field', count: 1 } }
           }
         }
       })
@@ -619,7 +674,7 @@ const describeField = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [ { name: 'foo.fighter.bar', type: 'Field' } ]
+            registeredFields: { 'foo.fighter.bar': { name: 'foo.fighter.bar', type: 'Field', count: 1 } }
           }
         }
       })
@@ -650,7 +705,7 @@ const describeField = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [ { name: 'foo', type: 'Field' } ]
+            registeredFields: { foo: { name: 'foo', type: 'Field', count: 1 } }
           }
         }
       })
@@ -661,7 +716,7 @@ const describeField = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [ { name: 'bar', type: 'Field' } ]
+            registeredFields: { bar: { name: 'bar', type: 'Field', count: 1 } }
           }
         }
       })
@@ -851,6 +906,207 @@ const describeField = (name, structure, combineReducers, expect) => {
       expect(renderUsername.calls[ 1 ].arguments[ 0 ].input.value).toBe('erikras')
     })
 
+    it('should call asyncValidate function on blur', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            title: 'Redux Form',
+            author: 'Erik Rasmussen',
+            username: 'oldusername'
+          }
+        }
+      })
+      const renderUsername = createSpy(props => <input {...props.input}/>).andCallThrough()
+      class Form extends Component {
+        render() {
+          return (
+            <div>
+              <Field name="title" component="input"/>
+              <Field name="author" component="input"/>
+              <Field name="username" component={renderUsername}/>
+            </div>
+          )
+        }
+      }
+      const asyncValidate = createSpy(() => new Promise(resolve => resolve())).andCallThrough()
+      const TestForm = reduxForm({ form: 'testForm', asyncValidate })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      renderUsername.calls[ 0 ].arguments[ 0 ].input.onBlur('ERIKRAS')
+
+      expect(asyncValidate).toHaveBeenCalled()
+    })
+
+    it('should call handle on focus', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            title: 'Redux Form'
+          }
+        }
+      })
+      const renderTitle = createSpy(props => <input {...props.input}/>).andCallThrough()
+      class Form extends Component {
+        render() {
+          return (
+            <Field name="title" component={renderTitle}/>
+          )
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+
+      expect(renderTitle.calls[ 0 ].arguments[ 0 ].meta.visited).toBe(false)
+      renderTitle.calls[ 0 ].arguments[ 0 ].input.onFocus()
+      expect(renderTitle.calls[ 1 ].arguments[ 0 ].meta.visited).toBe(true)
+    })
+
+    it('should not change the value of a radio when blur', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            title: 'Redux Form',
+            author: 'Erik Rasmussen',
+            sex: 'male'
+          }
+        }
+      })
+      const renderSex = createSpy(props => <input {...props.input}/>).andCallThrough()
+      class Form extends Component {
+        render() {
+          return (
+            <div>
+              <Field name="title" component="input"/>
+              <Field name="author" component="input"/>
+              <Field name="sex" value="female" type="radio" component={renderSex} />
+              <Field name="sex" value="male" type="radio" component={renderSex} />
+            </div>
+          )
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      expect(renderSex.calls[ 0 ].arguments[ 0 ].input.checked).toBe(false)
+      expect(renderSex.calls[ 1 ].arguments[ 0 ].input.checked).toBe(true)
+      renderSex.calls[ 0 ].arguments[ 0 ].input.onBlur('female')
+
+      expect(renderSex.calls[ 2 ].arguments[ 0 ].input.checked).toBe(false)
+      expect(renderSex.calls[ 3 ].arguments[ 0 ].input.checked).toBe(true)
+    })
+
+
+    it('should call handle on drag start with value', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            title: 'Redux Form'
+          }
+        }
+      })
+      const renderTitle = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const dragSpy = createSpy((key, val) => val).andCallThrough()
+      const event = dragStartMock(dragSpy)
+      class Form extends Component {
+        render() {
+          return (
+            <Field name="title" component={renderTitle}/>
+          )
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      expect(dragSpy).toNotHaveBeenCalled()
+      renderTitle.calls[ 0 ].arguments[ 0 ].input.onDragStart(event)
+      expect(dragSpy)
+        .toHaveBeenCalled()
+        .toHaveBeenCalledWith(dataKey, 'Redux Form')
+    })
+
+    it('should call handle on drag start without value', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            title: null
+          }
+        }
+      })
+      const renderTitle = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const dragSpy = createSpy((key, val) => val).andCallThrough()
+      const event = dragStartMock(dragSpy)
+      class Form extends Component {
+        render() {
+          return (
+            <Field name="title" component={renderTitle}/>
+          )
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      expect(dragSpy).toNotHaveBeenCalled()
+      renderTitle.calls[ 0 ].arguments[ 0 ].input.onDragStart(event)
+      expect(dragSpy)
+        .toHaveBeenCalled()
+        .toHaveBeenCalledWith(dataKey, '')
+    })
+
+    it('should call handle on drop', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            title: 'Redux Form'
+          }
+        }
+      })
+      const renderTitle = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const dropSpy = createSpy(key => key).andCallThrough()
+      const event = dropMock(dropSpy)
+      event.preventDefault = createSpy(event.preventDefault)
+      class Form extends Component {
+        render() {
+          return (
+            <Field name="title" component={renderTitle}/>
+          )
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      expect(dropSpy).toNotHaveBeenCalled()
+      renderTitle.calls[ 0 ].arguments[ 0 ].input.onDrop(event)
+      expect(event.preventDefault).toHaveBeenCalled()
+      expect(dropSpy)
+        .toHaveBeenCalled()
+        .toHaveBeenCalledWith(dataKey)
+    })
+
     it('should call format function on first render', () => {
       const store = makeStore({
         testForm: {
@@ -1019,7 +1275,7 @@ const describeField = (name, structure, combineReducers, expect) => {
             values: {
               age: 15 // number
             },
-            registeredFields: [ { name: 'age', type: 'Field' } ]
+            registeredFields: { age: { name: 'age', type: 'Field', count: 1 } }
           }
         }
       })
@@ -1125,12 +1381,12 @@ const describeField = (name, structure, combineReducers, expect) => {
       // update username field so it passes
       usernameInput.calls[ 0 ].arguments[ 0 ].input.onChange('erikras')
 
-      // username input rerendered twice, once for value, once for sync error
-      expect(usernameInput.calls.length).toBe(3)
+      // username input rerendered
+      expect(usernameInput.calls.length).toBe(2)
 
       // should be valid now
-      expect(usernameInput.calls[ 2 ].arguments[ 0 ].meta.valid).toBe(true)
-      expect(usernameInput.calls[ 2 ].arguments[ 0 ].meta.error).toBe(undefined)
+      expect(usernameInput.calls[ 1 ].arguments[ 0 ].meta.valid).toBe(true)
+      expect(usernameInput.calls[ 1 ].arguments[ 0 ].meta.error).toBe(undefined)
     })
 
     it('should rerender when sync warning changes', () => {
@@ -1221,11 +1477,11 @@ const describeField = (name, structure, combineReducers, expect) => {
       // update username field so it passes
       usernameInput.calls[ 0 ].arguments[ 0 ].input.onChange('erikras')
 
-      // username input rerendered twice, once for value, once for sync warning
-      expect(usernameInput.calls.length).toBe(3)
+      // username input rerendered
+      expect(usernameInput.calls.length).toBe(2)
 
       // should be valid now
-      expect(usernameInput.calls[ 2 ].arguments[ 0 ].meta.warning).toBe(undefined)
+      expect(usernameInput.calls[ 1 ].arguments[ 0 ].meta.warning).toBe(undefined)
     })
 
     it('should sync validate with field level validator', () => {
@@ -1261,12 +1517,12 @@ const describeField = (name, structure, combineReducers, expect) => {
       // update username field so it passes
       usernameInput.calls[ 0 ].arguments[ 0 ].input.onChange('erikras')
 
-      // username input rerendered twice, once for value, once for sync error
-      expect(usernameInput.calls.length).toBe(4)
+      // username input rerendered
+      expect(usernameInput.calls.length).toBe(3)
 
       // should be valid now
-      expect(usernameInput.calls[ 3 ].arguments[ 0 ].meta.valid).toBe(true)
-      expect(usernameInput.calls[ 3 ].arguments[ 0 ].meta.error).toBe(undefined)
+      expect(usernameInput.calls[ 2 ].arguments[ 0 ].meta.valid).toBe(true)
+      expect(usernameInput.calls[ 2 ].arguments[ 0 ].meta.error).toBe(undefined)
     })
 
     it('should sync warn with field level warning function', () => {
@@ -1302,13 +1558,463 @@ const describeField = (name, structure, combineReducers, expect) => {
       // update username field so it passes
       usernameInput.calls[ 0 ].arguments[ 0 ].input.onChange('erikras')
 
-      // username input rerendered twice, once for value, once for sync warning
-      expect(usernameInput.calls.length).toBe(4)
+      // username input rerendered
+      expect(usernameInput.calls.length).toBe(3)
 
       // should be valid now
-      expect(usernameInput.calls[ 3 ].arguments[ 0 ].meta.valid).toBe(true)
-      expect(usernameInput.calls[ 3 ].arguments[ 0 ].meta.warning).toBe(undefined)
+      expect(usernameInput.calls[ 2 ].arguments[ 0 ].meta.valid).toBe(true)
+      expect(usernameInput.calls[ 2 ].arguments[ 0 ].meta.warning).toBe(undefined)
     })
+
+    it('should not generate any warnings by passing api props into custom', () => {
+      const store = makeStore()
+      const renderSpy = createSpy()
+      class InputComponent extends Component {
+        render() {
+          renderSpy(this.props)
+          return <input {...this.props.input}/>
+        }
+      }
+      const apiProps = {
+        // all the official API props you can pass to Field
+        component: InputComponent,
+        name: 'foo',
+        normalize: x => x,
+        parse: x => x,
+        props: {},
+        format: x => x,
+        validate: () => undefined,
+        warn: () => undefined,
+        withRef: true
+      }
+      class Form extends Component {
+        render() {
+          return (<div>
+            <Field {...apiProps}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({
+        form: 'testForm'
+      })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      expect(renderSpy).toHaveBeenCalled()
+      const props = renderSpy.calls[ 0 ].arguments[ 0 ]
+      Object.keys(apiProps).forEach(key => expect(props[ key ]).toNotExist())
+    })
+
+    it('should only rerender field that has changed', () => {
+      const store = makeStore()
+      const input1 = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const input2 = createSpy(props => <input {...props.input}/>).andCallThrough()
+      class Form extends Component {
+        render() {
+          return (<div>
+            <Field name="input1" component={input1}/>
+            <Field name="input2" component={input2}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+      expect(input1).toHaveBeenCalled()
+      expect(input1.calls.length).toBe(1)
+      expect(input1.calls[ 0 ].arguments[ 0 ].input.value).toBe('')
+
+      expect(input2).toHaveBeenCalled()
+      expect(input2.calls.length).toBe(1)
+      expect(input2.calls[ 0 ].arguments[ 0 ].input.value).toBe('')
+
+      // change input #1
+      input1.calls[ 0 ].arguments[ 0 ].input.onChange('foo')
+
+      // expect input #1 to have been rerendered
+      expect(input1.calls.length).toBe(2)
+      expect(input1.calls[ 1 ].arguments[ 0 ].input.value).toBe('foo')
+
+      // expect input #2 to NOT have been rerendered
+      expect(input2.calls.length).toBe(1)
+    })
+
+    it('should allow onChange callback', () => {
+      const store = makeStore()
+      const renderInput = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const callback = createSpy()
+      class Form extends Component {
+        render() {
+          return (<div>
+            <Field name="foo" component={renderInput} onChange={callback}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      const input = TestUtils.findRenderedDOMComponentWithTag(dom, 'input')
+      input.value = 'bar'
+
+      expect(callback).toNotHaveBeenCalled()
+
+      // rendered once with no onChange prop passed down in custom props
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].onChange).toNotExist()
+
+      TestUtils.Simulate.change(input)
+
+      // call back was called
+      expect(callback).toHaveBeenCalled()
+      expect(callback.calls.length).toBe(1)
+      expect(callback.calls[ 0 ].arguments[ 0 ]).toExist()  // event
+      expect(callback.calls[ 0 ].arguments[ 1 ]).toBe('bar')
+      expect(callback.calls[ 0 ].arguments[ 2 ]).toBe(undefined)
+
+      // value changed
+      expect(renderInput.calls.length).toBe(2)
+      expect(renderInput.calls[ 1 ].arguments[ 0 ].input.value).toBe('bar')
+    })
+
+    it('should allow onChange callback to prevent change', () => {
+      const store = makeStore()
+      const renderInput = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const callback = createSpy(event => event.preventDefault()).andCallThrough()
+      class Form extends Component {
+        render() {
+          return (<div>
+            <Field name="foo" component={renderInput} onChange={callback}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      const input = TestUtils.findRenderedDOMComponentWithTag(dom, 'input')
+      input.value = 'bar'
+
+      expect(callback).toNotHaveBeenCalled()
+
+      // rendered once with no onChange prop passed down in custom props
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].onChange).toNotExist()
+
+      TestUtils.Simulate.change(input)
+
+      // call back was called
+      expect(callback).toHaveBeenCalled()
+      expect(callback.calls.length).toBe(1)
+      expect(callback.calls[ 0 ].arguments[ 0 ]).toExist()
+      expect(callback.calls[ 0 ].arguments[ 1 ]).toBe('bar')
+      expect(callback.calls[ 0 ].arguments[ 2 ]).toBe(undefined)
+
+      // value NOT changed
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].input.value).toBe('')
+    })
+
+    it('should allow onBlur callback', () => {
+      const store = makeStore()
+      const renderInput = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const callback = createSpy()
+      class Form extends Component {
+        render() {
+          return (<div>
+            <Field name="foo" component={renderInput} onBlur={callback}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      const input = TestUtils.findRenderedDOMComponentWithTag(dom, 'input')
+      input.value = 'bar'
+
+      expect(callback).toNotHaveBeenCalled()
+
+      // rendered once with no onBlur prop passed down in custom props
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].onBlur).toNotExist()
+
+      TestUtils.Simulate.blur(input)
+
+      // call back was called
+      expect(callback).toHaveBeenCalled()
+      expect(callback.calls.length).toBe(1)
+      expect(callback.calls[ 0 ].arguments[ 0 ]).toExist()  // event
+      expect(callback.calls[ 0 ].arguments[ 1 ]).toBe('bar')
+      expect(callback.calls[ 0 ].arguments[ 2 ]).toBe(undefined)
+
+      // value changed
+      expect(renderInput.calls.length).toBe(2)
+      expect(renderInput.calls[ 1 ].arguments[ 0 ].input.value).toBe('bar')
+    })
+
+    it('should allow onBlur callback to prevent blur', () => {
+      const store = makeStore()
+      const renderInput = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const callback = createSpy(event => event.preventDefault()).andCallThrough()
+      class Form extends Component {
+        render() {
+          return (<div>
+            <Field name="foo" component={renderInput} onBlur={callback}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      const input = TestUtils.findRenderedDOMComponentWithTag(dom, 'input')
+      input.value = 'bar'
+
+      expect(callback).toNotHaveBeenCalled()
+
+      // rendered once with no onBlur prop passed down in custom props
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].onBlur).toNotExist()
+
+      TestUtils.Simulate.blur(input)
+
+      // call back was called
+      expect(callback).toHaveBeenCalled()
+      expect(callback.calls.length).toBe(1)
+      expect(callback.calls[ 0 ].arguments[ 0 ]).toExist()
+      expect(callback.calls[ 0 ].arguments[ 1 ]).toBe('bar')
+      expect(callback.calls[ 0 ].arguments[ 2 ]).toBe(undefined)
+
+      // value NOT changed
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].input.value).toBe('')
+    })
+
+    it('should allow onFocus callback', () => {
+      const store = makeStore()
+      const renderInput = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const callback = createSpy()
+      class Form extends Component {
+        render() {
+          return (<div>
+            <Field name="foo" component={renderInput} onFocus={callback}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      const input = TestUtils.findRenderedDOMComponentWithTag(dom, 'input')
+
+      expect(callback).toNotHaveBeenCalled()
+
+      // rendered once with no onFocus prop passed down in custom props
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].onFocus).toNotExist()
+
+      // not marked as active
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].meta.active).toBe(false)
+
+      TestUtils.Simulate.focus(input)
+
+      // call back was called
+      expect(callback).toHaveBeenCalled()
+      expect(callback.calls.length).toBe(1)
+      expect(callback.calls[ 0 ].arguments[ 0 ]).toExist()  // event
+
+      // field marked active
+      expect(renderInput.calls.length).toBe(2)
+      expect(renderInput.calls[ 1 ].arguments[ 0 ].meta.active).toBe(true)
+    })
+
+    it('should allow onFocus callback to prevent focus', () => {
+      const store = makeStore()
+      const renderInput = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const callback = createSpy(event => event.preventDefault()).andCallThrough()
+      class Form extends Component {
+        render() {
+          return (<div>
+            <Field name="foo" component={renderInput} onFocus={callback}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      const input = TestUtils.findRenderedDOMComponentWithTag(dom, 'input')
+
+      expect(callback).toNotHaveBeenCalled()
+
+      // rendered once with no onFocus prop passed down in custom props
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].onFocus).toNotExist()
+
+      // not marked as active
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].meta.active).toBe(false)
+
+      TestUtils.Simulate.focus(input)
+
+      // call back was called
+      expect(callback).toHaveBeenCalled()
+      expect(callback.calls.length).toBe(1)
+      expect(callback.calls[ 0 ].arguments[ 0 ]).toExist()
+
+      // field NOT marked active
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].meta.active).toBe(false)
+    })
+
+    it('should allow onDrop callback', () => {
+      const store = makeStore()
+      const renderInput = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const callback = createSpy()
+      class Form extends Component {
+        render() {
+          return (<div>
+            <Field name="foo" component={renderInput} onDrop={callback}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      const input = TestUtils.findRenderedDOMComponentWithTag(dom, 'input')
+
+      expect(callback).toNotHaveBeenCalled()
+
+      // rendered once with no onDrop prop passed down in custom props
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].onDrop).toNotExist()
+
+      TestUtils.Simulate.drop(input, {
+        dataTransfer: { getData: () => 'bar' }
+      })
+
+      // call back was called
+      expect(callback).toHaveBeenCalled()
+      expect(callback.calls.length).toBe(1)
+      expect(callback.calls[ 0 ].arguments[ 0 ]).toExist()  // event
+      expect(callback.calls[ 0 ].arguments[ 1 ]).toBe('bar')
+      expect(callback.calls[ 0 ].arguments[ 2 ]).toBe(undefined)
+
+      // value changed
+      expect(renderInput.calls.length).toBe(2)
+      expect(renderInput.calls[ 1 ].arguments[ 0 ].input.value).toBe('bar')
+    })
+
+    it('should allow onDrop callback to prevent drop', () => {
+      const store = makeStore()
+      const renderInput = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const callback = createSpy(event => event.preventDefault()).andCallThrough()
+      class Form extends Component {
+        render() {
+          return (<div>
+            <Field name="foo" component={renderInput} onDrop={callback}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      const input = TestUtils.findRenderedDOMComponentWithTag(dom, 'input')
+      input.value = 'bar'
+
+      expect(callback).toNotHaveBeenCalled()
+
+      // rendered once with no onDrop prop passed down in custom props
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].onDrop).toNotExist()
+
+      TestUtils.Simulate.drop(input, {
+        dataTransfer: { getData: () => 'bar' }
+      })
+
+      // call back was called
+      expect(callback).toHaveBeenCalled()
+      expect(callback.calls.length).toBe(1)
+      expect(callback.calls[ 0 ].arguments[ 0 ]).toExist()
+      expect(callback.calls[ 0 ].arguments[ 1 ]).toBe('bar')
+      expect(callback.calls[ 0 ].arguments[ 2 ]).toBe(undefined)
+
+      // value NOT changed
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].input.value).toBe('')
+    })
+
+    it('should allow onDragStart callback', () => {
+      const store = makeStore()
+      const renderInput = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const callback = createSpy()
+      class Form extends Component {
+        render() {
+          return (<div>
+            <Field name="foo" component={renderInput} onDragStart={callback}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      const input = TestUtils.findRenderedDOMComponentWithTag(dom, 'input')
+
+      expect(callback).toNotHaveBeenCalled()
+
+      // rendered once with no onDragStart prop passed down in custom props
+      expect(renderInput.calls.length).toBe(1)
+      expect(renderInput.calls[ 0 ].arguments[ 0 ].onDragStart).toNotExist()
+
+      TestUtils.Simulate.dragStart(input, {
+        dataTransfer: { setData: () => {} }
+      })
+
+      // call back was called
+      expect(callback).toHaveBeenCalled()
+      expect(callback.calls.length).toBe(1)
+      expect(callback.calls[ 0 ].arguments[ 0 ]).toExist()  // event
+
+      // value NOT changed
+      expect(renderInput.calls.length).toBe(1)
+    })
+
   })
 }
 

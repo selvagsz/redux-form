@@ -33,6 +33,9 @@ A string path, in dot-and-bracket notation, corresponding to a value in the form
 be as simple as `'firstName'` or as complicated as
 `contact.billing.address[2].phones[1].areaCode`. See the [Usage](#usage) section below for details.
 
+Numeric field names, e.g. `name="42"` or `name="foo.5.email`, are not supported, as they can
+be confused for array indexes.
+
 #### `component : Component|Function|String` [required]
 
 A `Component`, stateless function, or string corresponding to a default JSX element.
@@ -72,13 +75,41 @@ would pass `value => value.toUpperCase()`. The parameters to your normalize func
 > All the values in the entire form before the current change. This will be an Immutable `Map` if
 > you are using Immutable JS.
 
+#### `onBlur : (event, newValue, previousValue) => void` [optional]
+
+A callback that will be called whenever an `onBlur` event is fired from the underlying input.
+If you call `event.preventDefault()`, the `BLUR` action will _NOT_ be dispatched, and the value
+and focus state will not be updated in the Redux store.
+
+#### `onChange : (event, newValue, previousValue) => void` [optional]
+
+A callback that will be called whenever an `onChange` event is fired from the underlying input.
+If you call `event.preventDefault()`, the `CHANGE` action will _NOT_ be dispatched, and the value
+will not be updated in the Redux store.
+
+#### `onDragStart : (event) => void` [optional]
+
+A callback that will be called whenever an `onDragStart` event is fired from the underlying input.
+
+#### `onDrop : (event, newValue, previousValue) => void` [optional]
+
+A callback that will be called whenever an `onDrop` event is fired from the underlying input.
+If you call `event.preventDefault()`, the `CHANGE` action will _NOT_ be dispatched, and the value
+will not be updated in the Redux store.
+
+#### `onFocus : (event) => void` [optional]
+
+A callback that will be called whenever an `onFocus` event is fired from the underlying input.
+If you call `event.preventDefault()`, the `FOCUS` action will _NOT_ be dispatched, and
+the focus state will not be updated in the Redux store.
+
 #### `props : object` [optional]
 
 Object with custom props to pass through the `Field` component into a component provided
 to `component` prop. This props will be merged to props provided by `Field` itself. This _may_ be
-useful if you are using TypeScript. This construct is completely optional; the primary way of 
-passing props along to your `component` is to give them directly to the `Field` component, but 
-if, for whatever reason, you prefer to bundle them into a separate object, you may do so by 
+useful if you are using TypeScript. This construct is completely optional; the primary way of
+passing props along to your `component` is to give them directly to the `Field` component, but
+if, for whatever reason, you prefer to bundle them into a separate object, you may do so by
 passing them into `props`.
 
 #### `parse : (value, name) => parsedValue` [optional]
@@ -90,13 +121,13 @@ localized date formats into `Date`s.
 `parse` is called with the field `value` and `name` as arguments and should return the new
 parsed value to be stored in the Redux store.
 
-#### `validate : (value, allValues) => error` [optional]
+#### `validate : (value, allValues, props) => error` [optional]
 
-Allows you to to provide a field-level validation rule. The function will be given the current value of the field and all the other form values. If the field is valid, it should return `undefined`, if the field is invalid, it should return an error (usually, but not necessarily, a `String`).
+Allows you to to provide a field-level validation rule. The function will be given the current value of the field, all the other form values, and any props passed to the form. If the field is valid, it should return `undefined`, if the field is invalid, it should return an error (usually, but not necessarily, a `String`).
 
-#### `warn : (value, allValues) => warning` [optional]
+#### `warn : (value, allValues, props) => warning` [optional]
 
-Allows you to to provide a field-level warning rule. The function will be given the current value of the field and all the other form values. If the field needs a warning, it should return the warning (usually, but not necessarily, a `String`). If the field does not need a warning, it should return `undefined`.
+Allows you to to provide a field-level warning rule. The function will be given the current value of the field, all the other form values, and any props passed to the form. If the field needs a warning, it should return the warning (usually, but not necessarily, a `String`). If the field does not need a warning, it should return `undefined`.
 
 #### `withRef : boolean` [optional]
 
@@ -191,7 +222,8 @@ The following properties and methods are available on an instance of a `Field` c
 
 #### `name : String`
 
-> The `name` prop that you passed in.
+> When nested in `FormSection`, returns the `name` prop prefixed with the `FormSection` name.
+Otherwise, returns the `name` prop that you passed in.
 
 #### `pristine : boolean`
 
@@ -228,7 +260,8 @@ to be destructured into your `<input/>` component.
 
 #### `input.name : String`
 
-> The name prop passed in.
+> When nested in `FormSection`, returns the `name` prop prefixed with the `FormSection` name.
+Otherwise, returns the `name` prop that you passed in.
 
 #### `input.onBlur(eventOrValue) : Function`
 
@@ -297,9 +330,9 @@ tracking for you.
 > The error for this field if its value is not passing validation. Both synchronous,
 > asynchronous, and submit validation errors will be reported here.
 
-#### `meta.warning : String` [optional]
+#### `meta.form : String`
 
-> The warning for this field if its value is not passing warning validation.
+> The name of the `form`. Could be useful if you want to manually dispatch actions.
 
 #### `meta.invalid : boolean`
 
@@ -313,6 +346,10 @@ tracking for you.
 
 > `true` if the field is currently being submitted
 
+#### `meta.submitFailed : boolean`
+
+> `true` if the form had `onSubmit` called and failed to submit _for any reason_. A subsequent successful submit will set it back to false.
+
 #### `meta.touched : boolean`
 
 > `true` if the field has been touched. By default this will be set when the field is blurred.
@@ -325,3 +362,7 @@ tracking for you.
 
 > `true` if this field has ever had focus. It will only work if you are passing `onFocus` to
 > your input element.
+
+#### `meta.warning : String` [optional]
+
+> The warning for this field if its value is not passing warning validation.

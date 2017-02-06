@@ -14,11 +14,13 @@ const validateNameProp = prop => {
   }
 }
 
-const createFields = ({ deepEqual, getIn }) => {
+const createFields = ({ deepEqual, getIn, toJS, size }) => {
 
   const ConnectedFields = createConnectedFields({
     deepEqual,
-    getIn
+    getIn,
+    toJS,
+    size
   })
   
   class Fields extends Component {
@@ -40,7 +42,7 @@ const createFields = ({ deepEqual, getIn }) => {
       }
       const { context } = this  
       const { _reduxForm: { register } } = context
-      this.names.forEach(name => register(prefixName(context, name), 'Field'))
+      this.names.forEach(name => register(name, 'Field'))
     }
 
     componentWillReceiveProps(nextProps) {
@@ -68,7 +70,8 @@ const createFields = ({ deepEqual, getIn }) => {
     }
 
     get names() {
-      return this.props.names
+      const { context } = this
+      return this.props.names.map(name => prefixName(context, name))
     }
 
     get dirty() {

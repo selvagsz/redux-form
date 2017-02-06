@@ -77,7 +77,7 @@ const checkSubmit = submit => {
  */
 const createReduxForm =
   structure => {
-    const { deepEqual, empty, getIn, setIn, fromJS } = structure
+    const { deepEqual, empty, getIn, setIn, keys, fromJS } = structure
     const isValid = createIsValid(structure)
     return initialConfig => {
       const config = {
@@ -91,12 +91,11 @@ const createReduxForm =
         keepDirtyOnReinitialize: false,
         getFormState: state => getIn(state, 'form'),
         pure: true,
+        forceUnregisterOnUnmount: false,
         ...initialConfig
       }
 
       return WrappedComponent => {
-        let instances = 0
-
         class Form extends Component {
           constructor(props) {
             super(props)
@@ -112,8 +111,6 @@ const createReduxForm =
             this.lastFieldValidatorKeys = []
             this.fieldWarners = {}
             this.lastFieldWarnerKeys = []
-
-            instances++
           }
 
           getChildContext() {
@@ -125,7 +122,8 @@ const createReduxForm =
                 getValues: this.getValues,
                 sectionPrefix: undefined,
                 register: this.register,
-                unregister: this.unregister
+                unregister: this.unregister,
+                registerInnerOnSubmit: innerOnSubmit => this.innerOnSubmit = innerOnSubmit
               }
             }
           }
@@ -178,9 +176,9 @@ const createReduxForm =
               if (shouldValidateResult) {
                 const propsToValidate = initialRender ? this.props : nextProps
                 const { _error, ...nextSyncErrors } = merge(
-                  validate ? validate(propsToValidate.values, propsToValidate) : {},
+                  validate ? validate(propsToValidate.values, propsToValidate) || {} : {},
                   fieldLevelValidate ?
-                    fieldLevelValidate(propsToValidate.values, propsToValidate) : {}
+                  fieldLevelValidate(propsToValidate.values, propsToValidate) || {} : {}
                 )
                 this.lastFieldValidatorKeys = fieldValidatorKeys
                 this.updateSyncErrorsIfNeeded(nextSyncErrors, _error)
@@ -256,10 +254,6 @@ const createReduxForm =
               this.destroyed = true
               destroy()
             }
-
-            this.unmounted = true
-
-            instances--
           }
 
           getValues() {
@@ -285,15 +279,31 @@ const createReduxForm =
           }
 
           unregister(name) {
-            if (this.props.destroyOnUnmount && !this.destroyed && (!this.unmounted || !instances)) {
-              this.props.unregisterField(name)
-              delete this.fieldValidators[ name ]
-              delete this.fieldWarners[ name ]
+            if (!this.destroyed) {
+              if (this.props.destroyOnUnmount || this.props.forceUnregisterOnUnmount) {
+                this.props.unregisterField(name)
+                delete this.fieldValidators[name]
+                delete this.fieldWarners[name]
+              } else {
+                this.props.unregisterField(name, false)
+              }
             }
           }
 
-          getFieldList() {
-            return this.props.registeredFields.map((field) => getIn(field, 'name'))
+          getFieldList(options) {
+            let registeredFields = this.props.registeredFields
+            let list = []
+            if (!registeredFields) {
+              return list
+            }
+            let keySeq = keys(registeredFields)
+            if (options && options.excludeFieldArray) {
+              keySeq = keySeq.filter(name => getIn(registeredFields, `['${name}'].type`) !== 'FieldArray')
+            }
+            return fromJS(keySeq.reduce((acc, key) => {
+              acc.push(key)
+              return acc
+            }, list))
           }
 
           generateValidator() {
@@ -380,15 +390,21 @@ const createReduxForm =
             if (!submitOrEvent || silenceEvent(submitOrEvent)) {
               // submitOrEvent is an event: fire submit if not already submitting
               if (!this.submitPromise) {
-                return this.listenToSubmit(handleSubmit(checkSubmit(onSubmit),
-                  this.props, this.props.validExceptSubmit, this.asyncValidate, this.getFieldList()))
+                if (this.innerOnSubmit) {
+                  // will call "submitOrEvent is the submit function" block below
+                  return this.innerOnSubmit()
+                } else {
+                  return this.listenToSubmit(handleSubmit(checkSubmit(onSubmit),
+                    this.props, this.props.validExceptSubmit, this.asyncValidate, this.getFieldList({ excludeFieldArray: true })))
+                }
               }
             } else {
               // submitOrEvent is the submit function: return deferred submit thunk
-              return silenceEvents(() =>
-              !this.submitPromise &&
-              this.listenToSubmit(handleSubmit(checkSubmit(submitOrEvent),
-                this.props, this.props.validExceptSubmit, this.asyncValidate, this.getFieldList())))
+              return silenceEvents(() => {
+                return !this.submitPromise &&
+                  this.listenToSubmit(handleSubmit(checkSubmit(submitOrEvent),
+                    this.props, this.props.validExceptSubmit, this.asyncValidate, this.getFieldList({ excludeFieldArray: true })))
+              })
             }
           }
 
@@ -418,6 +434,7 @@ const createReduxForm =
               change,
               destroy,
               destroyOnUnmount,
+              forceUnregisterOnUnmount,
               dirty,
               dispatch,
               enableReinitialize,
@@ -505,6 +522,7 @@ const createReduxForm =
         }
         Form.propTypes = {
           destroyOnUnmount: PropTypes.bool,
+          forceUnregisterOnUnmount: PropTypes.bool,
           form: PropTypes.string.isRequired,
           initialValues: PropTypes.object,
           getFormState: PropTypes.func,
@@ -525,8 +543,9 @@ const createReduxForm =
             const { form, getFormState, initialValues, enableReinitialize, keepDirtyOnReinitialize } = props
             const formState = getIn(getFormState(state) || empty, form) || empty
             const stateInitial = getIn(formState, 'initial')
+            const initialized = !!stateInitial
 
-            const shouldUpdateInitialValues = enableReinitialize && !deepEqual(initialValues, stateInitial)
+            const shouldUpdateInitialValues = enableReinitialize && initialized && !deepEqual(initialValues, stateInitial)
             const shouldResetValues = shouldUpdateInitialValues && !keepDirtyOnReinitialize
 
             let initial = initialValues || stateInitial || empty
@@ -541,11 +560,11 @@ const createReduxForm =
               values = initial
             }
 
-            const pristine = deepEqual(initial, values)
+            const pristine = shouldResetValues || deepEqual(initial, values)
             const asyncErrors = getIn(formState, 'asyncErrors')
             const syncErrors = getIn(formState, 'syncErrors') || {}
             const syncWarnings = getIn(formState, 'syncWarnings') || {}
-            const registeredFields = getIn(formState, 'registeredFields') || []
+            const registeredFields = getIn(formState, 'registeredFields')
             const valid = isValid(form, getFormState, false)(state)
             const validExceptSubmit = isValid(form, getFormState, true)(state)
             const anyTouched = !!getIn(formState, 'anyTouched')
@@ -561,7 +580,7 @@ const createReduxForm =
               asyncValidating: getIn(formState, 'asyncValidating') || false,
               dirty: !pristine,
               error,
-              initialized: !!stateInitial,
+              initialized,
               invalid: !valid,
               pristine,
               registeredFields,

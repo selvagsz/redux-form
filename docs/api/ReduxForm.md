@@ -33,7 +33,7 @@ or passed in as props to your component at runtime.**
 > field names for which `onBlur` should trigger a call to the `asyncValidate` function.
 Defaults to `[]`.
 
-> See [Asynchronous Blur Validation Example](https://redux-form.com/6.3.1/examples/asyncValidation/)
+> See [Asynchronous Blur Validation Example](https://redux-form.com/6.5.0/examples/asyncValidation/)
 for more details.
 
 #### `asyncValidate : (values:Object, dispatch:Function, props:Object, blurredField:String) => Promise<undefined, errors:Object>` [optional]
@@ -44,7 +44,7 @@ returns a Promise that will resolve if the validation is passed, or will reject 
 object of validation errors
 in the form `{ field1: <String>, field2: <String> }`.
 
-> See [Asynchronous Blur Validation Example](https://redux-form.com/6.3.1/examples/asyncValidation/)
+> See [Asynchronous Blur Validation Example](https://redux-form.com/6.5.0/examples/asyncValidation/)
 for more details.
 
 #### `destroyOnUnmount : boolean` [optional]
@@ -57,6 +57,10 @@ component is unmounted. Defaults to `true`.
 > When set to `true`, the form will reinitialize every time the `initialValues` prop changes.
 Defaults to `false`.  If the `keepDirtyOnReinitialize` option is also set, the form
 will retain the value of dirty fields when reinitializing.
+
+#### `forceUnregisterOnUnmount : boolean` [optional]
+
+> Whether or not to force unregistration of fields -- use in conjunction with `destroyOnUnmount`. Useful for wizard-type forms where you want to destroy fields as they unmount, but not the form's state. Defaults to `false`, as forms are normally unregistered on unmount.
 
 #### `getFormState : Function` [optional]
 
@@ -122,7 +126,11 @@ called with the following parameters:
 ##### `submitError : Error`
 
 > The error object that caused the submission to fail. If `errors` is set this will be most likely a `SubmissionError`, otherwise it can be any error or null.
- 
+
+> ##### `props : Object`
+
+> The props passed into your decorated component.
+
 #### `onSubmitSuccess : Function` [optional]
 
 > A callback function that will be called when a submission succeeds.  It will be called with the
@@ -135,6 +143,10 @@ following parameters:
 > ##### `dispatch : Function`
 
 > The Redux `dispatch` function.
+
+> ##### `props : Object`
+
+> The props passed into your decorated component.
 
 #### `propNamespace : String` [optional]
 
@@ -245,7 +257,7 @@ form has triggered it, respectively.
 If validation passes, it should return `{}`. If validation fails, it should return the validation errors in the
 form `{ field1: <String>, field2: <String> }`. Defaults to `(values, props) => ({})`.
 
-> See [Synchronous Validation Example](https://redux-form.com/6.3.1/examples/syncValidation/)
+> See [Synchronous Validation Example](https://redux-form.com/6.5.0/examples/syncValidation/)
 for more details.
 
 #### `warn : (values:Object, props:Object) => warnings:Object` [optional]

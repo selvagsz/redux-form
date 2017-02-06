@@ -391,7 +391,15 @@ describe('actions', () => {
       .toEqual({
         type: DESTROY,
         meta: {
-          form: 'myForm'
+          form: [ 'myForm' ]
+        }
+      })
+      .toPass(isFSA)
+    expect(destroy('myForm1', 'myForm2'))
+      .toEqual({
+        type: DESTROY,
+        meta: {
+          form: [ 'myForm1', 'myForm2' ]
         }
       })
       .toPass(isFSA)
@@ -560,7 +568,8 @@ describe('actions', () => {
           form: 'myForm'
         },
         payload: {
-          name: 'foo'
+          name: 'foo',
+          destroyOnUnmount: true
         }
       })
       .toPass(isFSA)

@@ -11,6 +11,7 @@ import createReducer from '../reducer'
 import createFieldArray from '../FieldArray'
 import createField from '../Field'
 import createFields from '../Fields'
+import FormSection from '../FormSection'
 import plain from '../structure/plain'
 import plainExpectations from '../structure/plain/expectations'
 import immutable from '../structure/immutable'
@@ -124,7 +125,79 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
       expect(props2.meta.touched).toBe(true)
     })
 
+    it('should not pass api props into custom', () => {
+      const store = makeStore()
+      const renderSpy = createSpy()
+      class ArrayComponent extends Component {
+        render() {
+          renderSpy(this.props)
+          return <div/>
+        }
+      }
+      const apiProps = {
+        // all the official API props you can pass to Field
+        component: ArrayComponent,
+        name: 'foo',
+        props: {},
+        validate: () => undefined,
+        warn: () => undefined,
+        withRef: true
+      }
+      class Form extends Component {
+        render() {
+          return (<div>
+            <FieldArray {...apiProps}/>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({
+        form: 'testForm'
+      })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
 
+      expect(renderSpy).toHaveBeenCalled()
+      const props = renderSpy.calls[ 0 ].arguments[ 0 ]
+      Object.keys(apiProps).forEach(key => expect(props[ key ]).toNotExist())
+    })
+
+    it('should provide name', () => {
+      const props = testProps({
+        values: {
+          foo: []
+        }
+      })
+      expect(props.fields.name).toBe('foo')
+    })
+    it('should prefix name when inside FormSection', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            foo: []
+          }
+        }
+      })
+      class Form extends Component {
+        render() {
+          return (<div>
+            <FormSection name="foo">
+              <FieldArray name="bar" component={TestComponent}/>
+            </FormSection>
+          </div>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+      const props = TestUtils.findRenderedComponentWithType(dom, TestComponent).props
+      expect(props.fields.name).toBe('foo.bar')
+    })
     it('should provide forEach', () => {
       const props = testProps({
         values: {
@@ -668,6 +741,146 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
       expect(component.calls[ 1 ].arguments[ 0 ].fields.length).toBe(1)
     })
 
+    it('should not prefix name in fields map callback when inside FormSection', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            foo: { bar: [ { val: 'dog' }, { val: 'cat' } ] }
+          }
+        }
+      })
+      const TestArray = ({ fields }) => (<div>{fields.map(name => <Field key={name} name={`${name}.val`} component={TestComponent} />)}</div>)
+      class Form extends Component {
+        render() {
+          return (<FormSection name="foo">
+            <FieldArray name="bar" component={TestArray} />
+          </FormSection>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+      expect(store.getState()).toEqualMap({
+        form: {
+          testForm: {
+            registeredFields: {
+              'foo.bar': { name: 'foo.bar', type: 'FieldArray', count: 1 },
+              'foo.bar[0].val': { name: 'foo.bar[0].val', type: 'Field', count: 1 },
+              'foo.bar[1].val': { name: 'foo.bar[1].val', type: 'Field', count: 1 }
+            },
+            values: {
+              foo: { bar: [ { val: 'dog' }, { val: 'cat' } ] }
+            }
+          }
+        }
+      })
+
+      const components = TestUtils.scryRenderedComponentsWithType(dom, TestComponent)
+      expect(components[0].props.input.name).toBe('foo.bar[0].val')
+      expect(components[1].props.input.name).toBe('foo.bar[1].val')
+    })
+
+    it('should prefix name getter when inside FormSection', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            foo: { bar: [ { val: 'dog' }, { val: 'cat' } ] }
+          }
+        }
+      })
+      const TestArray = ({ fields }) => (<div>{fields.map(name => <Field key={name} name={`${name}.val`} component={TestComponent} />)}</div>)
+      class Form extends Component {
+        render() {
+          return (<FormSection name="foo">
+            <FieldArray name="bar" component={TestArray} />
+          </FormSection>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+      const stub = TestUtils.findRenderedComponentWithType(dom, FieldArray)
+      expect(stub.name).toBe('foo.bar')
+    })
+
+    it('should not prefix name in fields map callback when inside multiple FormSection', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            foo: { fighter: { bar: [ { val: 'dog' }, { val: 'cat' } ] } }
+          }
+        }
+      })
+      const TestArray = ({ fields }) => (<div>{fields.map(name => <Field key={name} name={`${name}.val`} component={TestComponent} />)}</div>)
+      class Form extends Component {
+        render() {
+          return (<FormSection name="foo">
+            <FormSection name="fighter">
+              <FieldArray name="bar" component={TestArray} />
+            </FormSection>
+          </FormSection>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      expect(store.getState()).toEqualMap({
+        form: {
+          testForm: {
+            registeredFields: {
+              'foo.fighter.bar': { name: 'foo.fighter.bar', type: 'FieldArray', count: 1 },
+              'foo.fighter.bar[0].val': { name: 'foo.fighter.bar[0].val', type: 'Field', count: 1 },
+              'foo.fighter.bar[1].val': { name: 'foo.fighter.bar[1].val', type: 'Field', count: 1 }
+            },
+            values: {
+              foo: { fighter: { bar: [ { val: 'dog' }, { val: 'cat' } ] } }
+            }
+          }
+        }
+      })
+
+      const components = TestUtils.scryRenderedComponentsWithType(dom, TestComponent)
+      expect(components[0].props.input.name).toBe('foo.fighter.bar[0].val')
+      expect(components[1].props.input.name).toBe('foo.fighter.bar[1].val')
+    })
+    it('should prefix name getter when inside multiple FormSection', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            foo: { fighter: { bar: [ { val: 'dog' }, { val: 'cat' } ] } }
+          }
+        }
+      })
+      const TestArray = ({ fields }) => (<div>{fields.map(name => <Field key={name} name={`${name}.val`} component={TestComponent} />)}</div>)
+      class Form extends Component {
+        render() {
+          return (<FormSection name="foo">
+            <FormSection name="fighter">
+              <FieldArray name="bar" component={TestArray} />
+            </FormSection>
+          </FormSection>)
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      const dom = TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+      const stub = TestUtils.findRenderedComponentWithType(dom, FieldArray)
+      expect(stub.name).toBe('foo.fighter.bar')
+    })
+
     it('should provide field-level sync error for array field', () => {
       const store = makeStore({
         testForm: {
@@ -712,12 +925,70 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
 
       renderArray.calls[ 0 ].arguments[ 0 ].fields.push('rat')
 
-      expect(noMoreThanTwo.calls.length).toBe(2)
-      expect(noMoreThanTwo.calls[ 1 ].arguments[ 0 ]).toEqualMap([ 'dog', 'cat', 'rat' ])
+      // should validate twice, once for new field, and again to validate new field
+      expect(noMoreThanTwo.calls.length).toBe(3)
+      expect(noMoreThanTwo.calls[ 2 ].arguments[ 0 ]).toEqualMap([ 'dog', 'cat', 'rat' ])
 
-      expect(renderArray.calls.length).toBe(3)
-      expect(renderArray.calls[ 2 ].arguments[ 0 ].meta.valid).toBe(false)
-      expect(renderArray.calls[ 2 ].arguments[ 0 ].meta.error).toBe('Too many')
+      // should rerender
+      expect(renderArray.calls.length).toBe(2)
+      expect(renderArray.calls[ 1 ].arguments[ 0 ].meta.valid).toBe(false)
+      expect(renderArray.calls[ 1 ].arguments[ 0 ].meta.error).toBe('Too many')
+    })
+
+    it('should provide field-level sync error (with multiple validators) for array field', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            foo: [ 'dog', 'cat' ]
+          }
+        }
+      })
+      const renderArray = createSpy(({ fields }) =>
+        <div>
+          {fields.map((name, index) => <Field name={`${name}`} component="input" key={index}/>)}
+        </div>).andCallThrough()
+      const atLeastOne = createSpy(value =>
+        value && size(value) < 1 ? 'Too few' : undefined).andCallThrough()
+      const noMoreThanTwo = createSpy(value =>
+        value && size(value) > 2 ? 'Too many' : undefined).andCallThrough()
+
+      class Form extends Component {
+        render() {
+          return (
+            <div>
+              <FieldArray name="foo" component={renderArray} validate={[ atLeastOne, noMoreThanTwo ]}/>
+            </div>
+          )
+        }
+      }
+      const TestForm = reduxForm({
+        form: 'testForm'
+      })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      expect(renderArray).toHaveBeenCalled()
+      expect(renderArray.calls.length).toBe(1)
+      expect(renderArray.calls[ 0 ].arguments[ 0 ].meta.valid).toBe(true)
+      expect(renderArray.calls[ 0 ].arguments[ 0 ].meta.error).toNotExist()
+
+      expect(noMoreThanTwo).toHaveBeenCalled()
+      expect(noMoreThanTwo.calls.length).toBe(1)
+      expect(noMoreThanTwo.calls[ 0 ].arguments[ 0 ]).toEqualMap([ 'dog', 'cat' ])
+
+      renderArray.calls[ 0 ].arguments[ 0 ].fields.push('rat')
+
+      // should validate twice, once for new field, and again to validate new field
+      expect(noMoreThanTwo.calls.length).toBe(3)
+      expect(noMoreThanTwo.calls[ 2 ].arguments[ 0 ]).toEqualMap([ 'dog', 'cat', 'rat' ])
+
+      // should rerender
+      expect(renderArray.calls.length).toBe(2)
+      expect(renderArray.calls[ 1 ].arguments[ 0 ].meta.valid).toBe(false)
+      expect(renderArray.calls[ 1 ].arguments[ 0 ].meta.error).toBe('Too many')
     })
 
     it('should provide field-level sync warning for array field', () => {
@@ -764,12 +1035,70 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
 
       renderArray.calls[ 0 ].arguments[ 0 ].fields.push('rat')
 
-      expect(noMoreThanTwo.calls.length).toBe(2)
-      expect(noMoreThanTwo.calls[ 1 ].arguments[ 0 ]).toEqualMap([ 'dog', 'cat', 'rat' ])
+      // should validate twice, once for new field, and again to validate new field
+      expect(noMoreThanTwo.calls.length).toBe(3)
+      expect(noMoreThanTwo.calls[ 2 ].arguments[ 0 ]).toEqualMap([ 'dog', 'cat', 'rat' ])
 
-      expect(renderArray.calls.length).toBe(3)
-      expect(renderArray.calls[ 2 ].arguments[ 0 ].meta.valid).toBe(true) // just a warning
-      expect(renderArray.calls[ 2 ].arguments[ 0 ].meta.warning).toBe('Too many')
+      // should rerender
+      expect(renderArray.calls.length).toBe(2)
+      expect(renderArray.calls[ 1 ].arguments[ 0 ].meta.valid).toBe(true) // just a warning
+      expect(renderArray.calls[ 1 ].arguments[ 0 ].meta.warning).toBe('Too many')
+    })
+
+    it('should provide field-level sync warning (with multiple validators) for array field', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            foo: [ 'dog', 'cat' ]
+          }
+        }
+      })
+      const renderArray = createSpy(({ fields }) =>
+        <div>
+          {fields.map((name, index) => <Field name={`${name}`} component="input" key={index}/>)}
+        </div>).andCallThrough()
+      const atLeastOne = createSpy(value =>
+        value && size(value) < 1 ? 'Too few' : undefined).andCallThrough()
+      const noMoreThanTwo = createSpy(value =>
+        value && size(value) > 2 ? 'Too many' : undefined).andCallThrough()
+
+      class Form extends Component {
+        render() {
+          return (
+            <div>
+              <FieldArray name="foo" component={renderArray} warn={[ atLeastOne, noMoreThanTwo ]}/>
+            </div>
+          )
+        }
+      }
+      const TestForm = reduxForm({
+        form: 'testForm'
+      })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      expect(renderArray).toHaveBeenCalled()
+      expect(renderArray.calls.length).toBe(1)
+      expect(renderArray.calls[ 0 ].arguments[ 0 ].meta.valid).toBe(true)
+      expect(renderArray.calls[ 0 ].arguments[ 0 ].meta.warning).toNotExist()
+
+      expect(noMoreThanTwo).toHaveBeenCalled()
+      expect(noMoreThanTwo.calls.length).toBe(1)
+      expect(noMoreThanTwo.calls[ 0 ].arguments[ 0 ]).toEqualMap([ 'dog', 'cat' ])
+
+      renderArray.calls[ 0 ].arguments[ 0 ].fields.push('rat')
+
+      // should validate twice, once for new field, and again to validate new field
+      expect(noMoreThanTwo.calls.length).toBe(3)
+      expect(noMoreThanTwo.calls[ 2 ].arguments[ 0 ]).toEqualMap([ 'dog', 'cat', 'rat' ])
+
+      // should rerender
+      expect(renderArray.calls.length).toBe(2)
+      expect(renderArray.calls[ 1 ].arguments[ 0 ].meta.valid).toBe(true) // just a warning
+      expect(renderArray.calls[ 1 ].arguments[ 0 ].meta.warning).toBe('Too many')
     })
 
     it('should reconnect when props change', () => {
@@ -1137,9 +1466,9 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 }
+            }
           }
         }
       })
@@ -1169,10 +1498,10 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
             values: {
               dogs: [ undefined ]
             },
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' },
-              { name: 'dogs[0]', type: 'Field' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 },
+              'dogs[0]': { name: 'dogs[0]', type: 'Field', count: 1 }
+            }
           }
         }
       })
@@ -1206,9 +1535,9 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 }
+            }
           }
         }
       })
@@ -1238,10 +1567,10 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
             values: {
               dogs: [ 'Fido' ]
             },
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' },
-              { name: 'dogs[0]', type: 'Field' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 },
+              'dogs[0]': { name: 'dogs[0]', type: 'Field', count: 1 }
+            }
           }
         }
       })
@@ -1275,9 +1604,9 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 }
+            }
           }
         }
       })
@@ -1307,10 +1636,10 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
             values: {
               dogs: [ undefined ]
             },
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' },
-              { name: 'dogs[0]', type: 'Field' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 },
+              'dogs[0]': { name: 'dogs[0]', type: 'Field', count: 1 }
+            }
           }
         }
       })
@@ -1344,9 +1673,9 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 }
+            }
           }
         }
       })
@@ -1376,10 +1705,10 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
             values: {
               dogs: [ 'Fido' ]
             },
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' },
-              { name: 'dogs[0]', type: 'Field' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 },
+              'dogs[0]': { name: 'dogs[0]', type: 'Field', count: 1 }
+            }
           }
         }
       })
@@ -1414,9 +1743,9 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 }
+            }
           }
         }
       })
@@ -1446,10 +1775,10 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
             values: {
               dogs: [ undefined ]
             },
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' },
-              { name: 'dogs[0]', type: 'Field' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 },
+              'dogs[0]': { name: 'dogs[0]', type: 'Field', count: 1 }
+            }
           }
         }
       })
@@ -1483,9 +1812,9 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
       expect(store.getState()).toEqualMap({
         form: {
           testForm: {
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 }
+            }
           }
         }
       })
@@ -1515,10 +1844,10 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
             values: {
               dogs: [ 'Fido' ]
             },
-            registeredFields: [
-              { name: 'dogs', type: 'FieldArray' },
-              { name: 'dogs[0]', type: 'Field' }
-            ]
+            registeredFields: {
+              dogs: { name: 'dogs', type: 'FieldArray', count: 1 },
+              'dogs[0]': { name: 'dogs[0]', type: 'Field', count: 1 }
+            }
           }
         }
       })
@@ -1565,6 +1894,49 @@ const describeFieldArray = (name, structure, combineReducers, expect) => {
       expect(renderField.calls.length).toBe(2)
       expect(renderField.calls[ 0 ].arguments[ 0 ].input.value).toBe('firstValue')
       expect(renderField.calls[ 1 ].arguments[ 0 ].input.value).toBe('secondValue')
+    })
+
+    it('should get() actual current value from redux store', () => {
+      const store = makeStore({
+        testForm: {
+          values: {
+            dogs: [ 'Fido', 'Snoopy' ]
+          }
+        }
+      })
+      const renderField = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const renderFieldArray =
+        createSpy(({ fields }) => (<div>
+          {fields.map(field => <Field name={field} component={renderField} key={field}/>)}
+        </div>)).andCallThrough()
+      class Form extends Component {
+        render() {
+          return <FieldArray name="dogs" component={renderFieldArray}/>
+        }
+      }
+      const TestForm = reduxForm({ form: 'testForm' })(Form)
+      TestUtils.renderIntoDocument(
+        <Provider store={store}>
+          <TestForm/>
+        </Provider>
+      )
+
+      // field array rendered
+      expect(renderFieldArray).toHaveBeenCalled()
+      expect(renderFieldArray.calls.length).toBe(1)
+
+      expect(renderFieldArray.calls[0].arguments[0].fields.length).toBe(2)
+      expect(renderFieldArray.calls[0].arguments[0].fields.get(0)).toBe('Fido')
+
+      // change first field
+      renderField.calls[ 0 ].arguments[ 0 ].input.onChange('Odie')
+
+      // field array NOT rerendered
+      expect(renderFieldArray.calls.length).toBe(1)
+      expect(renderFieldArray.calls[0].arguments[0].fields.length).toBe(2)
+
+      // but get() should get the new value
+      expect(renderFieldArray.calls[0].arguments[0].fields.get(0)).toBe('Odie')
     })
   })
 }
